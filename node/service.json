@@ -17,5 +17,11 @@
       "path": "/unpublishPage",
       "public": false
     }
+  },
+  "events": {
+    "buildStatusBuilderHub": {
+      "sender": "vtex.builder-hub",
+      "keys": ["build.status"]
+    }
   }
 }

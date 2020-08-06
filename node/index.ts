@@ -1,6 +1,7 @@
 import {
   Cached,
   ClientsConfig,
+  Logger,
   LRUCache,
   method,
   ParamsContext,
@@ -10,6 +11,7 @@ import {
 } from '@vtex/api'
 
 import { Clients } from './clients'
+import errorHandler from './events/errorHandler'
 import { checkPublishedApp } from './middlewares/checkPublishedApp'
 import { methodNotAllowed } from './middlewares/methodNotAllowed'
 import { publishStoreFromPage } from './middlewares/publishStoreFromPage'
@@ -21,6 +23,23 @@ const TIMEOUT_MS = 8000
 // The @vtex/api HttpClient respects Cache-Control headers and uses the provided cache.
 const memoryCache = new LRUCache<string, Cached>({ max: 5000 })
 metrics.trackCache('status', memoryCache)
+
+let lastLogger: Logger
+
+function eventHandler (f: (ctx: ColossusEventContext) => Promise<void>) {
+  return async (ctx: ColossusEventContext): Promise<void> => {
+    const logger = new Logger(ctx)
+    lastLogger = logger
+
+    ctx.clients = {logger}
+
+    try {
+      await f(ctx)
+    } catch (error) {
+      errorHandler(ctx, true, logger, error)
+    }
+  }
+}
 
 // This is the configuration for clients available in `ctx.clients`.
 const clients: ClientsConfig<Clients> = {
@@ -52,6 +71,9 @@ declare global {
 // Export a service that defines route handlers and client options.
 export default new Service<Clients, State, ParamsContext>({
   clients,
+  events: {
+    buildStatusBuilderHub: eventHandler(buildStatus),
+  },
   routes: {
     // `status` is the route ID from service.json. It maps to an array of middlewares (or a single handler).
     install: method({
@@ -66,5 +88,5 @@ export default new Service<Clients, State, ParamsContext>({
       DEFAULT: methodNotAllowed,
       POST: [unpublishPage],
     }),
-  },
+  }
 })
